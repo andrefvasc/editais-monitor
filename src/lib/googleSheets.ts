@@ -155,6 +155,7 @@ export async function getEditalById(spreadsheetId: string, id: string) {
     summary: `Este edital (${edital.title}) foca em promover iniciativas inovadoras e de alto impacto no Ceará. Podem participar pessoas físicas e jurídicas que se enquadrem nas categorias estipuladas no anexo I.`,
     budget: edital.organization === 'SECITECE' ? 'R$ 5.000.000,00' : 'A definir',
     deadline: new Date(new Date(edital.publishDate).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(), // + 30 days
+    theme: 'Diversos',
     requirements: [
       'Ter sede no Ceará',
       'Comprovar experiência técnica na área',

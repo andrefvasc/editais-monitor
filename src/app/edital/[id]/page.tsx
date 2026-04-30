@@ -129,13 +129,19 @@ export default async function EditalSummary({ params }: { params: Promise<{ id: 
                   href={edital.link} 
                   target="_blank" 
                   rel="noreferrer"
-                  className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 font-semibold px-4 py-3 rounded-xl transition-all"
+                  className={`w-full flex items-center justify-center gap-2 font-semibold px-4 py-3 rounded-xl transition-all ${
+                    edital.organization.includes('PROSAS') 
+                    ? 'bg-indigo-500 hover:bg-indigo-400 text-white' 
+                    : 'bg-emerald-500 hover:bg-emerald-400 text-neutral-950'
+                  }`}
                 >
                   <ExternalLink className="w-4 h-4" />
-                  Acessar Edital Oficial
+                  {edital.organization.includes('PROSAS') ? 'Acessar Plataforma Prosas' : 'Acessar Edital Oficial'}
                 </a>
                 <p className="text-xs text-center text-neutral-500 mt-3">
-                  Você será redirecionado para o site oficial do governo.
+                  {edital.organization.includes('PROSAS') 
+                    ? 'Nota: Como a Prosas bloqueia robôs simples, este botão redireciona para a busca central deles para ilustrar a integração.' 
+                    : 'Você será redirecionado para o site oficial do governo ou da agência.'}
                 </p>
               </div>
             </div>

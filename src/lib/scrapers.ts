@@ -13,7 +13,7 @@ export interface ScrapedEdital {
   publishDate: string;
   link: string;
   status: string;
-  notified: false;
+  notified: boolean;
 }
 
 /**

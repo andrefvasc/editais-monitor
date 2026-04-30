@@ -39,26 +39,43 @@ export async function GET(request: Request) {
 
     const SPREADSHEET_ID = process.env.SPREADSHEET_ID || 'MOCK_SPREADSHEET';
 
-    // 3. Obter a lista de e-mails inscritos
+    // 3. Buscar editais já existentes para evitar duplicidade
+    const { getEditais } = await import('@/lib/googleSheets');
+    const existingEditais = await getEditais(SPREADSHEET_ID);
+    const existingIds = new Set(existingEditais.map((e: any) => e.id));
+
+    // Filtrar apenas os novos editais (que não estão na planilha)
+    const newEditais = relevantEditais.filter(ed => !existingIds.has(ed.id));
+
+    if (newEditais.length === 0) {
+      return NextResponse.json({ 
+        message: 'Monitoramento executado. Nenhum edital novo (inédito) encontrado.',
+        totalRaspados: allEditais.length,
+        totalRelevantes: relevantEditais.length,
+        novos: 0
+      });
+    }
+
+    // 4. Obter a lista de e-mails inscritos
     const subscribers = await getSubscribers(SPREADSHEET_ID);
 
-    // 4. Salvar na Planilha e Marcar como notificado
-    for (const edital of relevantEditais) {
-      // Neste mock, vamos considerar que se chegou aqui, vamos notificar.
-      // Numa implementação real, checaríamos na planilha se o 'id' já existe antes de enviar.
+    // 5. Salvar na Planilha e Marcar como notificado
+    for (const edital of newEditais) {
       edital.notified = true;
       await appendEditalToSheet(SPREADSHEET_ID, edital);
     }
 
-    // 5. Enviar Alertas por Email
+    // 6. Enviar Alertas por Email (Apenas para os NOVOS)
     let emailLogs: {email: string, status: string, url?: string, error?: string}[] = [];
     if (subscribers.length > 0) {
-      emailLogs = await sendEditalAlert(subscribers, relevantEditais) || [];
+      emailLogs = await sendEditalAlert(subscribers, newEditais) || [];
     }
 
     return NextResponse.json({ 
       message: 'Monitoramento executado com sucesso!',
-      editaisEncontrados: relevantEditais.length,
+      totalRaspados: allEditais.length,
+      editaisRelevantes: relevantEditais.length,
+      editaisNovosAdicionados: newEditais.length,
       emailsEnviados: subscribers.length,
       emailLogs
     });
