@@ -7,8 +7,23 @@ const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 // permitindo rodar em modo "Mock" (Simulação).
 export async function getAuthClient() {
   try {
+    // Para a Vercel (Produção), vamos usar as variáveis de ambiente em vez do arquivo físico
+    if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+      const auth = new google.auth.GoogleAuth({
+        credentials: {
+          client_email: process.env.GOOGLE_CLIENT_EMAIL,
+          // O Vercel às vezes escapa as quebras de linha nas variáveis de ambiente
+          private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        },
+        scopes: SCOPES,
+      });
+      const client = await auth.getClient();
+      return google.sheets({ version: 'v4', auth: client as any });
+    }
+
+    // Para uso Local (quando existe o arquivo credentials.json)
     const auth = new google.auth.GoogleAuth({
-      keyFile: 'credentials.json', // Caminho para o arquivo na raiz do projeto
+      keyFile: 'credentials.json',
       scopes: SCOPES,
     });
     const client = await auth.getClient();
