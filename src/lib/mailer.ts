@@ -38,12 +38,17 @@ export async function sendEditalAlert(subscribers: {email: string, name?: string
 
   const transporter = await getTransporter();
 
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  
   const editaisHtml = newEditais.map(ed => `
     <div style="border: 1px solid #ccc; padding: 15px; margin-bottom: 10px; border-radius: 8px;">
       <h3 style="margin-top: 0;">${ed.title}</h3>
       <p><strong>Órgão:</strong> ${ed.organization}</p>
       <p><strong>Data de Publicação:</strong> ${new Date(ed.publishDate).toLocaleDateString('pt-BR')}</p>
-      <a href="${ed.link}" style="display: inline-block; padding: 10px 15px; background: #007bff; color: white; text-decoration: none; border-radius: 5px;">Acessar Edital</a>
+      <div style="margin-top: 15px;">
+        <a href="${baseUrl}/edital/${ed.id}" style="display: inline-block; padding: 10px 15px; background: #059669; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin-right: 10px;">Ver Resumo no Monitor</a>
+        <a href="${ed.link}" style="display: inline-block; padding: 10px 15px; background: #3f3f46; color: white; text-decoration: none; border-radius: 5px;">Acessar Fonte Oficial</a>
+      </div>
     </div>
   `).join('');
 

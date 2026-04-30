@@ -77,7 +77,7 @@ export async function GET(request: Request) {
     }
 
     // 5. Enviar Alertas por Email
-    let emailLogs = [];
+    let emailLogs: {email: string, status: string, url?: string, error?: string}[] = [];
     if (subscribers.length > 0) {
       emailLogs = await sendEditalAlert(subscribers, relevantEditais) || [];
     }
