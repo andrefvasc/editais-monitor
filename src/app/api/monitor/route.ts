@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { appendEditalToSheet, getSubscribers } from '@/lib/googleSheets';
 import { sendEditalAlert } from '@/lib/mailer';
-import { scrapeFuncap, scrapeCearaGov } from '@/lib/scrapers';
+import { scrapeFuncap, scrapeCearaGov, scrapeFinep, scrapeProsas } from '@/lib/scrapers';
 
 // Palavras-chave exigidas pelo usuário
-const KEYWORDS = ['inovação', 'inovacao', 'cultura', 'futuro do trabalho', 'consultoria', 'consultorias'];
+const KEYWORDS = ['inovação', 'inovacao', 'cultura', 'futuro do trabalho', 'consultoria', 'consultorias', 'impacto social', 'terceiro setor', 'empreendedorismo', 'chamada pública'];
 
 // Função para checar se o texto contém alguma palavra-chave
 function containsKeywords(text: string): boolean {
@@ -15,13 +15,15 @@ function containsKeywords(text: string): boolean {
 export async function GET(request: Request) {
   try {
     // 1. "Raspar" dados dos portais reais (assíncrono e em paralelo para ser mais rápido)
-    const [funcapEditais, cearaGovEditais] = await Promise.all([
+    const [funcapEditais, cearaGovEditais, finepEditais, prosasEditais] = await Promise.all([
       scrapeFuncap(),
-      scrapeCearaGov()
+      scrapeCearaGov(),
+      scrapeFinep(),
+      scrapeProsas()
     ]);
 
     // Unir os resultados
-    const allEditais = [...funcapEditais, ...cearaGovEditais];
+    const allEditais = [...funcapEditais, ...cearaGovEditais, ...finepEditais, ...prosasEditais];
 
     // 2. Filtrar pelos temas de interesse
     const relevantEditais = allEditais.filter(ed => 
