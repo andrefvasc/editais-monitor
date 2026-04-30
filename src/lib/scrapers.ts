@@ -177,25 +177,10 @@ export async function scrapeFinep(): Promise<ScrapedEdital[]> {
 }
 
 /**
- * Scraper para o portal Prosas (Mock/Placeholder)
- * Nota: A Prosas carrega os editais via JavaScript (React) dinamicamente.
- * O cheerio não consegue ler o DOM gerado. No futuro, isso exigirá Puppeteer
- * ou integração com a API oficial da Prosas.
+ * Scraper para o portal Prosas
+ * Nota: A Prosas carrega os editais via JavaScript dinamicamente.
+ * Aguardando API Key para integração real.
  */
 export async function scrapeProsas(): Promise<ScrapedEdital[]> {
-  // Retornamos um mock representativo para validar que o ecossistema está preparado
-  // para receber editais nacionais de terceiro setor/impacto.
-  const rand = Math.floor(Math.random() * 1000);
-  
-  return [
-    {
-      id: `PROSAS-MOCK-${rand}`,
-      title: 'Chamada Pública Prosas - Aceleração de Impacto Social 2026',
-      organization: 'PROSAS (Destaque)',
-      publishDate: new Date().toISOString(),
-      link: 'https://prosas.com.br/editais',
-      status: 'Aberto',
-      notified: false
-    }
-  ];
+  return [];
 }

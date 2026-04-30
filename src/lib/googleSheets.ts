@@ -37,7 +37,7 @@ export async function getAuthClient() {
 export async function appendEditalToSheet(spreadsheetId: string, edital: any) {
   const sheets = await getAuthClient();
   if (!sheets) {
-    console.log('[MOCK] Edital adicionado na planilha:', edital);
+    console.error('Google Sheets não configurado. Não foi possível salvar:', edital.id);
     return;
   }
 
@@ -68,8 +68,8 @@ export async function appendEditalToSheet(spreadsheetId: string, edital: any) {
 export async function getSubscribers(spreadsheetId: string) {
   const sheets = await getAuthClient();
   if (!sheets) {
-    console.log('[MOCK] Retornando lista de inscritos mockada');
-    return [{ name: 'Usuário Teste', email: 'test@example.com' }];
+    console.error('Google Sheets não configurado. Impossível buscar inscritos.');
+    return [];
   }
 
   try {
@@ -95,27 +95,8 @@ export async function getSubscribers(spreadsheetId: string) {
 export async function getEditais(spreadsheetId: string) {
   const sheets = await getAuthClient();
   if (!sheets) {
-    // Retorna dados mockados se a planilha não estiver configurada
-    return [
-      {
-        id: '1',
-        title: 'Edital de Fomento à Inovação 2026',
-        organization: 'SECITECE',
-        publishDate: new Date().toISOString(),
-        link: 'https://secitece.ce.gov.br/inovacao2026',
-        status: 'Aberto',
-        notified: true
-      },
-      {
-        id: '2',
-        title: 'Credenciamento de Consultorias em Cultura',
-        organization: 'SECULT',
-        publishDate: new Date().toISOString(),
-        link: 'https://secult.ce.gov.br/consultorias',
-        status: 'Aberto',
-        notified: true
-      }
-    ];
+    console.error('Google Sheets não configurado. Retornando lista vazia de editais.');
+    return [];
   }
 
   try {
