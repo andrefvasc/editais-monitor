@@ -22,8 +22,8 @@ export async function getAuthClient() {
     });
     const client = await auth.getClient();
     return google.sheets({ version: 'v4', auth: client as any });
-  } catch (error) {
-    console.warn('⚠️ Google Sheets Auth Error');
+  } catch (error: any) {
+    console.warn('⚠️ Google Sheets Auth Error:', error.message || error);
     return null;
   }
 }
@@ -96,7 +96,7 @@ export async function getEditais(spreadsheetId: string) {
       let link = row[4] || '';
       // Fallback para links inválidos ou antigos mocks '#'
       if (link === '#' || !link.startsWith('http')) {
-        const query = encodeURIComponent(`${row[1]} ${row[2]} edital`);
+        const query = encodeURIComponent(`${(row[1] || 'Edital')} ${(row[2] || '')} edital`);
         link = `https://www.google.com/search?q=${query}`;
       }
 

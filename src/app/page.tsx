@@ -52,7 +52,7 @@ export default function Dashboard() {
     const text = (title + ' ' + org).toLowerCase();
     if (text.includes('inovação') || text.includes('inovacao') || text.includes('tecnologia') || text.includes('finep') || text.includes('funcap')) return 'Inovação';
     if (text.includes('cultura') || text.includes('secult')) return 'Cultura';
-    if (text.includes('consultoria')) return 'Consultoria';
+    if (text.includes('consultoria') || text.includes('seplag')) return 'Gestão/Consultoria';
     if (text.includes('empreendedorismo') || text.includes('empreendedora')) return 'Empreendedorismo';
     if (text.includes('impacto social') || text.includes('terceiro setor')) return 'Impacto Social';
     if (text.includes('futuro do trabalho')) return 'Futuro do Trabalho';
@@ -159,8 +159,8 @@ export default function Dashboard() {
             <div className="bg-neutral-900 rounded-2xl p-6 border border-neutral-800 flex items-start justify-between">
               <div>
                 <p className="text-neutral-400 text-sm font-medium mb-1">Fontes Monitoradas</p>
-                <p className="text-4xl font-bold text-emerald-400">3</p>
-                <p className="text-xs text-neutral-500 mt-1">FUNCAP · FINEP · Gov CE</p>
+                <p className="text-4xl font-bold text-emerald-400">4</p>
+                <p className="text-xs text-neutral-500 mt-1">FUNCAP · SEPLAG · FINEP · Gov CE</p>
               </div>
               <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
                 <TrendingUp className="w-6 h-6 text-emerald-500" />
