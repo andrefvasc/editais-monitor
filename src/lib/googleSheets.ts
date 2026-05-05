@@ -94,9 +94,19 @@ export async function getEditais(spreadsheetId: string) {
 
     return rows.slice(1).map(row => {
       let link = row[4] || '';
-      // Fallback para links inválidos ou antigos mocks '#'
-      if (link === '#' || !link.startsWith('http')) {
-        const query = encodeURIComponent(`${(row[1] || 'Edital')} ${(row[2] || '')} edital`);
+      
+      // Detecção agressiva de links genéricos ou quebrados dos mocks antigos
+      const isGeneric = 
+        link === '#' || 
+        !link.startsWith('http') || 
+        link.endsWith('/editais/') || 
+        link.endsWith('/editais') ||
+        link.includes('ce.gov.br/fomento') ||
+        link.includes('consultoria-seplag');
+
+      if (isGeneric) {
+        // Se o link for genérico, cria um link de busca direta no Google pelo título do edital
+        const query = encodeURIComponent(`${(row[1] || 'Edital')} ${(row[2] || '')} arquivo edital pdf`);
         link = `https://www.google.com/search?q=${query}`;
       }
 
