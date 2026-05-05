@@ -16,8 +16,6 @@ export interface ScrapedEdital {
 
 /**
  * Scraper para o portal da FUNCAP (Inovação e Ciência)
- * Estrutura do HTML: td.laranja contém o título; ul.ListaDecorada li a[href]
- * nos tr seguintes contém os PDFs diretos do edital.
  */
 export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
   const pageUrl = 'https://montenegro.funcap.ce.gov.br/sugba/editais-site-wordpress';
@@ -36,26 +34,21 @@ export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // Coletar primeiro todos os links PDF da página em ordem
-    // Cada href "../edital/NNN.pdf" corresponde a um edital
     const allPdfLinks: string[] = [];
     $('ul.ListaDecorada li a').each((_i, el) => {
       const href = $(el).attr('href') || '';
-      // Só o arquivo principal do edital (não resultados, não adendos como primeiro)
       if (href.includes('/edital/') && !href.includes('/resultados/')) {
         const clean = href.replace(/^\.\.\//, '/');
         allPdfLinks.push(`${pdfBase}${clean}`);
       }
     });
 
-    // Coletar os títulos dos programas (td.laranja > a > span ou td.laranja > a)
     let pdfIndex = 0;
     $('td.laranja').each((_i, el) => {
       const title = $(el).find('span').text().trim() || $(el).find('a').text().trim();
       if (!title) return;
       if (title.toLowerCase().includes('resultado')) return;
 
-      // Associar o próximo PDF disponível a este título
       const link = allPdfLinks[pdfIndex] || 'https://www.funcap.ce.gov.br/editais/';
       pdfIndex++;
 
@@ -81,10 +74,11 @@ export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
 }
 
 /**
- * Scraper genérico do Governo do Ceará (focado em Cultura e outros)
+ * Scraper para o portal da SEPLAG (Planejamento e Gestão)
+ * Foca em editais de concursos e seleções.
  */
-export async function scrapeCearaGov(): Promise<ScrapedEdital[]> {
-  const url = 'https://www.ce.gov.br/category/editais/';
+export async function scrapeSeplag(): Promise<ScrapedEdital[]> {
+  const url = 'https://www.seplag.ce.gov.br/category/noticias/';
   const editais: ScrapedEdital[] = [];
 
   try {
@@ -99,7 +93,62 @@ export async function scrapeCearaGov(): Promise<ScrapedEdital[]> {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    $('article.news-card').each((_i, element) => {
+    $('.news-card').each((_i, element) => {
+      const titleElement = $(element).find('.card-title a');
+      const title = titleElement.text().trim();
+      const link = titleElement.attr('href') || url;
+
+      // Só aceita se no título tiver palavras de edital/seleção
+      const lowerTitle = title.toLowerCase();
+      if (
+        lowerTitle.includes('edital') || 
+        lowerTitle.includes('seleção') || 
+        lowerTitle.includes('credenciamento') ||
+        lowerTitle.includes('chamada pública')
+      ) {
+        const hash = crypto.createHash('md5').update(title).digest('hex').substring(0, 8);
+        const id = `SEPLAG-${hash}`;
+
+        editais.push({
+          id,
+          title,
+          organization: 'SEPLAG',
+          publishDate: new Date().toISOString(),
+          link,
+          status: 'Aberto',
+          notified: false
+        });
+      }
+    });
+
+    return editais;
+  } catch (error) {
+    console.error('Erro ao fazer scrape da SEPLAG:', error);
+    return [];
+  }
+}
+
+/**
+ * Scraper genérico do Governo do Ceará
+ */
+export async function scrapeCearaGov(): Promise<ScrapedEdital[]> {
+  // Mudamos para a busca direta por editais, que é mais estável que as categorias
+  const url = 'https://www.ce.gov.br/?s=edital';
+  const editais: ScrapedEdital[] = [];
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (!response.ok) return []; // Se der 404 ou 500 na busca, apenas pula
+
+    const html = await response.text();
+    const $ = cheerio.load(html);
+
+    $('.news-card').each((_i, element) => {
       const titleElement = $(element).find('.card-title a');
       const title = titleElement.text().trim();
       const link = titleElement.attr('href') || url;
@@ -110,12 +159,14 @@ export async function scrapeCearaGov(): Promise<ScrapedEdital[]> {
         organization = 'SECULT';
       } else if (upperTitle.includes('SPS')) {
         organization = 'SPS';
+      } else if (upperTitle.includes('SEPLAG')) {
+        organization = 'SEPLAG';
       }
 
       const hash = crypto.createHash('md5').update(title).digest('hex').substring(0, 8);
       const id = `CEGOV-${hash}`;
 
-      if (title) {
+      if (title && !title.toLowerCase().includes('resultado')) {
         editais.push({
           id,
           title,
@@ -137,7 +188,6 @@ export async function scrapeCearaGov(): Promise<ScrapedEdital[]> {
 
 /**
  * Scraper para o portal da FINEP (Nacional)
- * Links apontam para a página de detalhes de cada chamada pública.
  */
 export async function scrapeFinep(): Promise<ScrapedEdital[]> {
   const url = 'http://www.finep.gov.br/chamadas-publicas/chamadaspublicas?situacao=aberta';
@@ -187,7 +237,6 @@ export async function scrapeFinep(): Promise<ScrapedEdital[]> {
 
 /**
  * Scraper para o portal Prosas
- * A Prosas usa JavaScript dinâmico — aguardando API Key para integração real.
  */
 export async function scrapeProsas(): Promise<ScrapedEdital[]> {
   return [];
