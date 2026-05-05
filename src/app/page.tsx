@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Bell, Briefcase, Calendar, CheckCircle, Search, TrendingUp, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Bell, Briefcase, Calendar, CheckCircle, Search, TrendingUp, AlertTriangle, RefreshCw, Inbox } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-// Mock data for the chart
 const chartData = [
   { name: 'Jan', editais: 4 },
   { name: 'Fev', editais: 3 },
@@ -22,48 +21,47 @@ export default function Dashboard() {
   const [subscribed, setSubscribed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [monitoring, setMonitoring] = useState(false);
+  const [monitorResult, setMonitorResult] = useState<any>(null);
   const [emailLogs, setEmailLogs] = useState<{email: string, status: string, url?: string, error?: string}[]>([]);
 
-  useEffect(() => {
-    // In a real app, this would fetch from our Next.js API that reads from Google Sheets
-    setTimeout(() => {
-      setEditais([
-        {
-          id: '1',
-          title: 'Edital de Fomento à Inovação Tecnológica 2026',
-          organization: 'SECITECE',
-          publishDate: new Date().toISOString(),
-          link: '#',
-          status: 'Aberto',
-          theme: 'Inovação'
-        },
-        {
-          id: '2',
-          title: 'Credenciamento de Consultorias em Gestão Pública',
-          organization: 'SEPLAG',
-          publishDate: new Date(Date.now() - 86400000).toISOString(),
-          link: '#',
-          status: 'Aberto',
-          theme: 'Consultorias'
-        },
-        {
-          id: '3',
-          title: 'Apoio a Projetos de Cultura Digital',
-          organization: 'SECULT',
-          publishDate: new Date(Date.now() - 172800000).toISOString(),
-          link: '#',
-          status: 'Fechado',
-          theme: 'Cultura'
-        },
-      ]);
+  const fetchEditais = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/editais');
+      const data = await res.json();
+      if (data.editais) {
+        // Derivar o "tema" a partir das palavras-chave do título/organização
+        const withTheme = data.editais.map((e: any) => ({
+          ...e,
+          theme: deriveTheme(e.title, e.organization),
+        }));
+        setEditais(withTheme);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar editais:', err);
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   }, []);
 
-  const handleSubscribe = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchEditais();
+  }, [fetchEditais]);
+
+  function deriveTheme(title: string, org: string): string {
+    const text = (title + ' ' + org).toLowerCase();
+    if (text.includes('inovação') || text.includes('inovacao') || text.includes('tecnologia') || text.includes('finep') || text.includes('funcap')) return 'Inovação';
+    if (text.includes('cultura') || text.includes('secult')) return 'Cultura';
+    if (text.includes('consultoria')) return 'Consultoria';
+    if (text.includes('empreendedorismo') || text.includes('empreendedora')) return 'Empreendedorismo';
+    if (text.includes('impacto social') || text.includes('terceiro setor')) return 'Impacto Social';
+    if (text.includes('futuro do trabalho')) return 'Futuro do Trabalho';
+    return 'Diversos';
+  }
+
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
-    // Real app: call API to append to Subscribers sheet
     setSubscribed(true);
     setEmail('');
     setTimeout(() => setSubscribed(false), 3000);
@@ -71,13 +69,16 @@ export default function Dashboard() {
 
   const triggerMonitor = async () => {
     setMonitoring(true);
+    setMonitorResult(null);
     try {
       const res = await fetch('/api/monitor');
       const data = await res.json();
+      setMonitorResult(data);
       if (data.emailLogs) setEmailLogs(data.emailLogs);
-      alert(`Monitoramento concluído! ${data.editaisEncontrados} editais encontrados e ${data.emailsEnviados} e-mails enviados.`);
+      // Recarregar a tabela para mostrar os novos editais
+      await fetchEditais();
     } catch (e) {
-      alert('Erro ao executar monitoramento.');
+      setMonitorResult({ error: 'Erro ao executar monitoramento.' });
     } finally {
       setMonitoring(false);
     }
@@ -98,9 +99,10 @@ export default function Dashboard() {
             <button 
               onClick={triggerMonitor}
               disabled={monitoring}
-              className="text-sm font-medium px-4 py-2 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+              className="text-sm font-medium px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
             >
-              {monitoring ? 'Buscando...' : 'Forçar Busca Agora'}
+              <RefreshCw className={`w-4 h-4 ${monitoring ? 'animate-spin' : ''}`} />
+              {monitoring ? 'Buscando nos portais...' : 'Forçar Busca Agora'}
             </button>
           </div>
         </div>
@@ -146,8 +148,8 @@ export default function Dashboard() {
           <div className="flex flex-col gap-4">
             <div className="bg-neutral-900 rounded-2xl p-6 border border-neutral-800 flex items-start justify-between">
               <div>
-                <p className="text-neutral-400 text-sm font-medium mb-1">Editais Abertos</p>
-                <p className="text-4xl font-bold">24</p>
+                <p className="text-neutral-400 text-sm font-medium mb-1">Editais na Planilha</p>
+                <p className="text-4xl font-bold">{loading ? '–' : editais.length}</p>
               </div>
               <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
                 <Briefcase className="w-6 h-6 text-emerald-500" />
@@ -156,8 +158,9 @@ export default function Dashboard() {
             
             <div className="bg-neutral-900 rounded-2xl p-6 border border-neutral-800 flex items-start justify-between">
               <div>
-                <p className="text-neutral-400 text-sm font-medium mb-1">Crescimento (Mês)</p>
-                <p className="text-4xl font-bold text-emerald-400">+12%</p>
+                <p className="text-neutral-400 text-sm font-medium mb-1">Fontes Monitoradas</p>
+                <p className="text-4xl font-bold text-emerald-400">3</p>
+                <p className="text-xs text-neutral-500 mt-1">FUNCAP · FINEP · Gov CE</p>
               </div>
               <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
                 <TrendingUp className="w-6 h-6 text-emerald-500" />
@@ -230,37 +233,70 @@ export default function Dashboard() {
 
         </div>
 
-        {/* Email Logs Section */}
-        {emailLogs.length > 0 && (
-          <div className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
-            <div className="p-6 border-b border-neutral-800 flex items-center justify-between">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Bell className="w-5 h-5 text-neutral-400" />
-                Log de E-mails Enviados
-              </h3>
-            </div>
-            <div className="p-6">
-              <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 p-4 rounded-xl mb-6 text-sm">
-                <strong>Nota sobre E-mails:</strong> Como você ainda não configurou as credenciais SMTP no arquivo <code>.env</code>, o sistema utilizou o <strong>Ethereal Email</strong> (um serviço de teste) para simular o disparo. Abaixo estão os links para você visualizar como o e-mail chegou na caixa de entrada virtual!
+        {/* Resultado do Monitoramento */}
+        {monitorResult && (
+          <div className={`rounded-2xl border p-6 ${
+            monitorResult.error 
+              ? 'bg-red-500/5 border-red-500/20' 
+              : monitorResult.editaisNovosAdicionados > 0
+                ? 'bg-emerald-500/5 border-emerald-500/20'
+                : 'bg-neutral-900 border-neutral-800'
+          }`}>
+            <div className="flex items-start gap-4">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                monitorResult.error ? 'bg-red-500/10' : monitorResult.editaisNovosAdicionados > 0 ? 'bg-emerald-500/10' : 'bg-neutral-800'
+              }`}>
+                {monitorResult.error 
+                  ? <AlertTriangle className="w-5 h-5 text-red-400" />
+                  : monitorResult.editaisNovosAdicionados > 0 
+                    ? <Bell className="w-5 h-5 text-emerald-400" />
+                    : <Inbox className="w-5 h-5 text-neutral-400" />}
               </div>
-              <ul className="space-y-3">
-                {emailLogs.map((log, i) => (
-                  <li key={i} className="flex items-center justify-between bg-neutral-950 p-4 rounded-xl border border-neutral-800">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-2 h-2 rounded-full ${log.status === 'Enviado' ? 'bg-emerald-400' : 'bg-red-500'}`}></div>
-                      <span className="text-sm font-medium">{log.email}</span>
-                      <span className="text-xs text-neutral-500">- {log.status}</span>
-                    </div>
-                    {log.url && (
-                      <a href={log.url} target="_blank" rel="noreferrer" className="text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 px-3 py-1.5 rounded-full transition-colors">
-                        Visualizar E-mail
-                      </a>
+              <div className="flex-1">
+                <p className={`font-semibold mb-1 ${
+                  monitorResult.error ? 'text-red-400' : monitorResult.editaisNovosAdicionados > 0 ? 'text-emerald-400' : 'text-neutral-200'
+                }`}>
+                  {monitorResult.error || monitorResult.message}
+                </p>
+                {!monitorResult.error && (
+                  <div className="flex flex-wrap gap-4 mt-3">
+                    <span className="text-xs bg-neutral-800 px-3 py-1.5 rounded-full border border-neutral-700">
+                      🔍 <strong>{monitorResult.totalRaspados}</strong> editais varridos
+                    </span>
+                    <span className="text-xs bg-neutral-800 px-3 py-1.5 rounded-full border border-neutral-700">
+                      🎯 <strong>{monitorResult.totalRelevantes ?? monitorResult.editaisRelevantes ?? 0}</strong> relevantes
+                    </span>
+                    <span className={`text-xs px-3 py-1.5 rounded-full border ${
+                      monitorResult.editaisNovosAdicionados > 0 
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' 
+                        : 'bg-neutral-800 border-neutral-700'
+                    }`}>
+                      ✨ <strong>{monitorResult.editaisNovosAdicionados ?? monitorResult.novos ?? 0}</strong> novos adicionados
+                    </span>
+                    {monitorResult.emailsEnviados > 0 && (
+                      <span className="text-xs bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-full">
+                        📧 <strong>{monitorResult.emailsEnviados}</strong> e-mails enviados
+                      </span>
                     )}
-                    {log.error && <span className="text-xs text-red-400">{log.error}</span>}
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                )}
+              </div>
             </div>
+            {emailLogs.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-neutral-800">
+                <p className="text-xs text-neutral-500 mb-3 font-medium uppercase tracking-wider">Log de envios</p>
+                <ul className="space-y-2">
+                  {emailLogs.map((log, i) => (
+                    <li key={i} className="flex items-center gap-3 text-sm">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${log.status === 'Enviado' ? 'bg-emerald-400' : 'bg-red-500'}`} />
+                      <span className="text-neutral-300">{log.email}</span>
+                      <span className="text-neutral-500">— {log.status}</span>
+                      {log.error && <span className="text-red-400 text-xs">{log.error}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
@@ -293,6 +329,14 @@ export default function Dashboard() {
                       <td className="px-6 py-4"><div className="h-4 bg-neutral-800 rounded w-1/4"></div></td>
                     </tr>
                   ))
+                ) : editais.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-16 text-center">
+                      <Inbox className="w-10 h-10 text-neutral-700 mx-auto mb-3" />
+                      <p className="text-neutral-500 font-medium">Nenhum edital capturado ainda.</p>
+                      <p className="text-neutral-600 text-sm mt-1">Clique em <strong className="text-neutral-400">"Forçar Busca Agora"</strong> para varrer os portais.</p>
+                    </td>
+                  </tr>
                 ) : (
                   editais.map((edital) => (
                     <tr 
