@@ -34,52 +34,49 @@ async function fetchWithTimeout(url: string, options: any = {}, timeout = 15000)
 }
 
 /**
- * Função "Deep Scan": Visita uma página de notícia para tentar encontrar o link direto do Edital (PDF ou Mapa Cultural)
+ * Filtro ultra-rigoroso de ano. 
+ * Somente aceita se:
+ * 1. O título contiver 2025 ou 2026
+ * 2. OU se o título não contiver nenhum ano de 4 dígitos (pode ser um edital novo sem ano no nome)
  */
-async function findDirectLink(url: string): Promise<string> {
-  if (url.includes('.pdf') || url.includes('mapacultural.secult.ce.gov.br/oportunidade/')) {
-    return url;
+function isRecent(title: string): boolean {
+  const text = title.toLowerCase();
+  const years = text.match(/\d{4}/g);
+  
+  if (years) {
+    // Se achou anos, pelo menos um tem que ser 2025 ou 2026
+    const hasCurrentYear = years.some(y => y === '2025' || y === '2026');
+    if (!hasCurrentYear) return false;
   }
 
+  // Bloqueio explícito de padrões de anos antigos comuns em portais do CE
+  const blackList = ['/09', '/10', '/11', '/12', '/13', '/14', '/15', '/16', '/17', '/18', '/19', '/20', '/21', '/22', '/23', '/24'];
+  if (blackList.some(y => text.includes(y))) return false;
+
+  return true;
+}
+
+async function findDirectLink(url: string): Promise<string> {
+  if (url.includes('.pdf') || url.includes('mapacultural.secult.ce.gov.br/oportunidade/')) return url;
   try {
     const response = await fetchWithTimeout(url);
     const html = await response.text();
     const $ = cheerio.load(html);
-
     let directLink = url;
-
-    // Procura por links que pareçam ser o edital real
     $('a').each((_i, el) => {
       const href = $(el).attr('href') || '';
       const text = $(el).text().toLowerCase();
-      
-      // Prioridade 1: Mapa Cultural ou Links de Oportunidade
-      if (href.includes('mapacultural.secult.ce.gov.br/oportunidade/')) {
-        directLink = href;
-        return false; // break
-      }
-
-      // Prioridade 2: PDFs que contenham "edital" no nome ou no texto do link
+      if (href.includes('mapacultural.secult.ce.gov.br/oportunidade/')) { directLink = href; return false; }
       if (href.endsWith('.pdf') && (href.toLowerCase().includes('edital') || text.includes('edital') || text.includes('clique aqui'))) {
         directLink = href;
-        // Não damos break aqui pois pode haver um link melhor (Mapa Cultural) depois
       }
     });
-
     return directLink;
-  } catch (e) {
-    return url;
-  }
-}
-
-function isRecent(title: string): boolean {
-  const text = title.toLowerCase();
-  const oldYears = ['2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024'];
-  return !oldYears.some(y => text.includes(y));
+  } catch (e) { return url; }
 }
 
 /**
- * Scraper FUNCAP
+ * Scraper FUNCAP - Apenas os mais recentes do topo
  */
 export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
   const pageUrl = 'https://montenegro.funcap.ce.gov.br/sugba/editais-site-wordpress';
@@ -103,10 +100,12 @@ export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
     $('td.laranja, .edital-title').each((_i, el) => {
       const title = $(el).text().trim();
       if (!title || title.toLowerCase().includes('resultado')) return;
-      if (!isRecent(title)) return;
-
+      
       const link = allPdfLinks[pdfIndex] || 'https://www.funcap.ce.gov.br/editais/';
       pdfIndex++;
+
+      // Filtro Rigoroso
+      if (!isRecent(title)) return;
 
       const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
       editais.push({
@@ -122,93 +121,29 @@ export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
 }
 
 /**
- * Scraper SECULT com Deep Scan
+ * Scraper SECULT
  */
 export async function scrapeSecult(): Promise<ScrapedEdital[]> {
   const url = 'https://www.secult.ce.gov.br/';
   const editais: ScrapedEdital[] = [];
-
   try {
     const response = await fetchWithTimeout(url);
     const html = await response.text();
     const $ = cheerio.load(html);
-
     const candidates: {title: string, link: string}[] = [];
-
     $('a').each((_i, element) => {
       const title = $(element).text().trim().replace(/\s+/g, ' ');
       const link = $(element).attr('href') || '';
       if (title.length < 25 || !link.startsWith('http')) return;
-      
-      const lowerTitle = title.toLowerCase();
-      const isRelevant = ['edital', 'mecenas', 'chamada', 'seleção', 'convocatória'].some(k => lowerTitle.includes(k));
-
-      if (isRelevant && isRecent(title)) {
+      if (['edital', 'mecenas', 'chamada', 'seleção', 'convocatória'].some(k => title.toLowerCase().includes(k)) && isRecent(title)) {
         candidates.push({ title, link });
       }
     });
-
-    // Deep Scan nos candidatos (limitado aos 5 primeiros para evitar timeout)
     for (const cand of candidates.slice(0, 5)) {
       const finalLink = await findDirectLink(cand.link);
       const hash = crypto.createHash('md5').update(cand.title.toLowerCase()).digest('hex').substring(0, 8);
-      editais.push({
-        id: `SECULT-${hash}`,
-        title: cand.title,
-        organization: 'SECULT',
-        publishDate: new Date().toISOString(),
-        link: finalLink,
-        status: 'Aberto',
-        notified: false
-      });
+      editais.push({ id: `SECULT-${hash}`, title: cand.title, organization: 'SECULT', publishDate: new Date().toISOString(), link: finalLink, status: 'Aberto', notified: false });
     }
-
-    return editais;
-  } catch (e) { return []; }
-}
-
-/**
- * Scraper FINEP com Deep Scan
- */
-export async function scrapeFinep(): Promise<ScrapedEdital[]> {
-  const url = 'http://www.finep.gov.br/noticias';
-  const editais: ScrapedEdital[] = [];
-
-  try {
-    const response = await fetchWithTimeout(url);
-    const html = await response.text();
-    const $ = cheerio.load(html);
-
-    const candidates: {title: string, link: string}[] = [];
-
-    $('h2 a, h3 a, a').each((_i, element) => {
-      const title = $(element).text().trim().replace(/\s+/g, ' ');
-      const href = $(element).attr('href') || '';
-      if (title.length < 30) return;
-      
-      const lowerTitle = title.toLowerCase();
-      const isRelevant = lowerTitle.includes('edital') || lowerTitle.includes('chamada pública') || lowerTitle.includes('seleção');
-
-      if (isRelevant && isRecent(title)) {
-        const link = href.startsWith('http') ? href : `http://www.finep.gov.br${href}`;
-        candidates.push({ title, link });
-      }
-    });
-
-    for (const cand of candidates.slice(0, 5)) {
-      const finalLink = await findDirectLink(cand.link);
-      const hash = crypto.createHash('md5').update(cand.title.toLowerCase()).digest('hex').substring(0, 8);
-      editais.push({
-        id: `FINEP-${hash}`,
-        title: cand.title,
-        organization: 'FINEP',
-        publishDate: new Date().toISOString(),
-        link: finalLink,
-        status: 'Aberto',
-        notified: false
-      });
-    }
-
     return editais;
   } catch (e) { return []; }
 }
@@ -227,12 +162,39 @@ export async function scrapeSeplag(): Promise<ScrapedEdital[]> {
       const title = $(element).text().trim().replace(/\s+/g, ' ');
       const link = $(element).attr('href') || '';
       if (title.length < 25 || !link.startsWith('http')) return;
-      const lowerTitle = title.toLowerCase();
-      if (['edital', 'seleção', 'chamada pública'].some(k => lowerTitle.includes(k)) && isRecent(title)) {
+      if (['edital', 'seleção', 'chamada pública'].some(k => title.toLowerCase().includes(k)) && isRecent(title)) {
         const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
         editais.push({ id: `SEPLAG-${hash}`, title, organization: 'SEPLAG', publishDate: new Date().toISOString(), link, status: 'Aberto', notified: false });
       }
     });
+    return editais;
+  } catch (e) { return []; }
+}
+
+/**
+ * Scraper FINEP
+ */
+export async function scrapeFinep(): Promise<ScrapedEdital[]> {
+  const url = 'http://www.finep.gov.br/noticias';
+  const editais: ScrapedEdital[] = [];
+  try {
+    const response = await fetchWithTimeout(url);
+    const html = await response.text();
+    const $ = cheerio.load(html);
+    const candidates: {title: string, link: string}[] = [];
+    $('h2 a, h3 a, a').each((_i, element) => {
+      const title = $(element).text().trim().replace(/\s+/g, ' ');
+      const href = $(element).attr('href') || '';
+      if (title.length < 30) return;
+      if (['edital', 'chamada pública', 'seleção'].some(k => title.toLowerCase().includes(k)) && isRecent(title)) {
+        candidates.push({ title, link: href.startsWith('http') ? href : `http://www.finep.gov.br${href}` });
+      }
+    });
+    for (const cand of candidates.slice(0, 5)) {
+      const finalLink = await findDirectLink(cand.link);
+      const hash = crypto.createHash('md5').update(cand.title.toLowerCase()).digest('hex').substring(0, 8);
+      editais.push({ id: `FINEP-${hash}`, title: cand.title, organization: 'FINEP', publishDate: new Date().toISOString(), link: finalLink, status: 'Aberto', notified: false });
+    }
     return editais;
   } catch (e) { return []; }
 }
