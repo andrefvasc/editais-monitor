@@ -36,6 +36,20 @@ async function fetchWithTimeout(url: string, options: any = {}, timeout = 10000)
 }
 
 /**
+ * Verifica se o edital é recente (2025 ou 2026)
+ */
+function isRecent(title: string): boolean {
+  const currentYears = ['2025', '2026', '26', '25'];
+  const text = title.toLowerCase();
+  // Se o título explicitamente menciona um ano antigo, descarta
+  if (text.includes('2010') || text.includes('2011') || text.includes('2014') || text.includes('2016') || text.includes('2018') || text.includes('2020') || text.includes('2022')) {
+    return false;
+  }
+  // Se menciona um dos anos atuais ou não menciona ano nenhum (pode ser novo), aceita
+  return true; 
+}
+
+/**
  * Scraper para o portal da FUNCAP
  */
 export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
@@ -50,11 +64,9 @@ export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // Mapeamos todos os PDFs por ordem de aparição
     const allPdfLinks: string[] = [];
     $('ul.ListaDecorada li a').each((_i, el) => {
       const href = $(el).attr('href') || '';
-      // Priorizamos o arquivo principal do edital (geralmente o primeiro de cada lista)
       if (href.includes('/edital/') && !href.includes('/resultados/') && !href.includes('/prorrogacao/')) {
         const clean = href.replace(/^\.\.\//, '/');
         allPdfLinks.push(`${pdfBase}${clean}`);
@@ -66,11 +78,13 @@ export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
       const title = $(el).find('span').text().trim() || $(el).find('a').text().trim();
       if (!title || title.toLowerCase().includes('resultado')) return;
 
-      // Se não achar PDF, usa a página de busca do portal como fallback de segurança
       const link = allPdfLinks[pdfIndex] || 'https://www.funcap.ce.gov.br/editais/';
       pdfIndex++;
 
-      const hash = crypto.createHash('md5').update(title).digest('hex').substring(0, 8);
+      // Filtro de Ano e Relevância
+      if (!isRecent(title)) return;
+
+      const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
       editais.push({
         id: `FUNCAP-${hash}`,
         title,
@@ -90,7 +104,7 @@ export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
 }
 
 /**
- * Scraper para o portal da SECULT (Cultura)
+ * Scraper para o portal da SECULT
  */
 export async function scrapeSecult(): Promise<ScrapedEdital[]> {
   const url = 'https://www.secult.ce.gov.br/';
@@ -103,14 +117,16 @@ export async function scrapeSecult(): Promise<ScrapedEdital[]> {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // No portal da Secult, os editais aparecem como notícias recentes
     $('.news-card, article, .post').each((_i, element) => {
       const titleElement = $(element).find('h3 a, .card-title a, a').first();
       const title = titleElement.text().trim();
       const link = titleElement.attr('href') || '';
 
-      if (title.toLowerCase().includes('edital') || title.toLowerCase().includes('mecenas') || title.toLowerCase().includes('chamada')) {
-        const hash = crypto.createHash('md5').update(title).digest('hex').substring(0, 8);
+      if (!title || !isRecent(title)) return;
+
+      const lowerTitle = title.toLowerCase();
+      if (lowerTitle.includes('edital') || lowerTitle.includes('mecenas') || lowerTitle.includes('chamada')) {
+        const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
         editais.push({
           id: `SECULT-${hash}`,
           title,
@@ -149,11 +165,13 @@ export async function scrapeSeplag(): Promise<ScrapedEdital[]> {
       const title = titleElement.text().trim();
       const link = titleElement.attr('href') || url;
 
+      if (!title || !isRecent(title)) return;
+
       const lowerTitle = title.toLowerCase();
       const isRelevant = ['edital', 'seleção', 'selecao', 'credenciamento', 'chamada pública'].some(k => lowerTitle.includes(k));
 
       if (isRelevant) {
-        const hash = crypto.createHash('md5').update(title).digest('hex').substring(0, 8);
+        const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
         editais.push({
           id: `SEPLAG-${hash}`,
           title,
@@ -190,7 +208,7 @@ export async function scrapeCearaGov(): Promise<ScrapedEdital[]> {
     $('.news-card').each((_i, element) => {
       const titleElement = $(element).find('.card-title a');
       const title = titleElement.text().trim();
-      if (!title) return;
+      if (!title || !isRecent(title)) return;
 
       const link = titleElement.attr('href') || url;
       let organization = 'GOVERNO DO CEARÁ';
@@ -200,7 +218,7 @@ export async function scrapeCearaGov(): Promise<ScrapedEdital[]> {
       else if (upperTitle.includes('SPS')) organization = 'SPS';
       else if (upperTitle.includes('SEPLAG')) organization = 'SEPLAG';
 
-      const hash = crypto.createHash('md5').update(title).digest('hex').substring(0, 8);
+      const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
       editais.push({
         id: `CEGOV-${hash}`,
         title,
@@ -238,7 +256,9 @@ export async function scrapeFinep(): Promise<ScrapedEdital[]> {
       const relativeLink = $(element).attr('href') || '';
       const link = relativeLink.startsWith('http') ? relativeLink : `http://www.finep.gov.br${relativeLink}`;
 
-      const hash = crypto.createHash('md5').update(title).digest('hex').substring(0, 8);
+      if (!title || !isRecent(title)) return;
+
+      const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
       editais.push({
         id: `FINEP-${hash}`,
         title,

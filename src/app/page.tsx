@@ -31,11 +31,26 @@ export default function Dashboard() {
       const res = await fetch('/api/editais');
       const data = await res.json();
       if (data.editais) {
-        const withTheme = data.editais.map((e: any) => ({
-          ...e,
-          theme: deriveTheme(e.title, e.organization),
-        }));
-        setEditais(withTheme);
+        // 1. Filtrar por ano (apenas 2025/2026) e remover irrelevantes
+        const recentOnly = data.editais.filter((e: any) => {
+          const title = e.title.toLowerCase();
+          const hasOldYear = ['2010','2011','2014','2016','2018','2020','2021','2022','2023','2024'].some(y => title.includes(y));
+          return !hasOldYear;
+        });
+
+        // 2. Remover duplicatas por título (mesmo que tenham IDs diferentes)
+        const uniqueTitles = new Map();
+        recentOnly.forEach((e: any) => {
+          const normalizedTitle = e.title.toLowerCase().trim();
+          if (!uniqueTitles.has(normalizedTitle)) {
+            uniqueTitles.set(normalizedTitle, {
+              ...e,
+              theme: deriveTheme(e.title, e.organization),
+            });
+          }
+        });
+
+        setEditais(Array.from(uniqueTitles.values()));
       }
     } catch (err) {
       console.error('Erro ao carregar editais:', err);
@@ -126,7 +141,7 @@ export default function Dashboard() {
           <div className="flex flex-col gap-4">
             <div className="bg-neutral-900 rounded-2xl p-6 border border-neutral-800 flex items-start justify-between">
               <div>
-                <p className="text-neutral-400 text-sm font-medium mb-1">Editais na Planilha</p>
+                <p className="text-neutral-400 text-sm font-medium mb-1">Editais Recentes</p>
                 <p className="text-4xl font-bold">{loading ? '–' : editais.length}</p>
               </div>
               <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
@@ -167,8 +182,8 @@ export default function Dashboard() {
 
         <div className="bg-neutral-900 rounded-2xl border border-neutral-800 overflow-hidden">
           <div className="p-6 border-b border-neutral-800 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Últimos Editais Capturados</h3>
-            <span className="text-xs text-neutral-500 bg-neutral-950 px-3 py-1.5 rounded-full border border-neutral-800">Atualizado ao vivo</span>
+            <h3 className="text-lg font-semibold">Oportunidades Atuais (2025-2026)</h3>
+            <span className="text-xs text-neutral-500 bg-neutral-950 px-3 py-1.5 rounded-full border border-neutral-800">Filtro de temporalidade ativo</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -191,7 +206,7 @@ export default function Dashboard() {
                     </tr>
                   ))
                 ) : editais.length === 0 ? (
-                  <tr><td colSpan={5} className="px-6 py-16 text-center text-neutral-500">Nenhum edital capturado ainda.</td></tr>
+                  <tr><td colSpan={5} className="px-6 py-16 text-center text-neutral-500">Nenhum edital recente encontrado.</td></tr>
                 ) : (
                   editais.map((edital) => (
                     <tr key={edital.id} className="hover:bg-neutral-800/50 transition-colors group">
