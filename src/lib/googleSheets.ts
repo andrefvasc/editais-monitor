@@ -95,20 +95,18 @@ export async function getEditais(spreadsheetId: string) {
     return rows.slice(1).map(row => {
       let link = row[4] || '';
       
-      // Detecção agressiva de links genéricos ou quebrados dos mocks antigos
-      const isGeneric = 
-        link === '#' || 
-        !link.startsWith('http') || 
-        link.endsWith('/editais/') || 
-        link.endsWith('/editais') ||
-        link.includes('ce.gov.br/fomento') ||
-        link.includes('consultoria-seplag');
+      // Detecção de links completamente inválidos (mocks antigos)
+      const isInvalid = link === '#' || !link.startsWith('http');
 
-      if (isGeneric) {
-        // Se o link for genérico, cria um link de busca direta no Google pelo título do edital
-        const query = encodeURIComponent(`${(row[1] || 'Edital')} ${(row[2] || '')} arquivo edital pdf`);
+      if (isInvalid) {
+        // Apenas para links # geramos a busca no Google com termos de PDF
+        const query = encodeURIComponent(`${(row[1] || 'Edital')} ${(row[2] || '')} arquivo edital pdf download`);
         link = `https://www.google.com/search?q=${query}`;
       }
+
+      // IMPORTANTE: Para links da FUNCAP e SECULT que apontam para a home/lista (dados legados),
+      // nós mantemos o link mas o robô novo já está configurado para capturar PDFs.
+      // Instruímos o usuário a limpar a planilha para atualizar esses links.
 
       return {
         id: row[0],
