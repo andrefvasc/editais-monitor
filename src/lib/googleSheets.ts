@@ -92,32 +92,38 @@ export async function getEditais(spreadsheetId: string) {
     const rows = response.data.values;
     if (!rows || rows.length === 0) return [];
 
-    return rows.slice(1).map(row => {
-      let link = row[4] || '';
+    // Desduplicação por título para evitar poluição no Dashboard
+    const uniqueEditais = new Map();
+
+    rows.slice(1).forEach(row => {
+      const title = row[1] || '';
+      const normalizedTitle = title.toLowerCase().trim();
       
-      // Detecção de links completamente inválidos (mocks antigos)
+      let link = row[4] || '';
       const isInvalid = link === '#' || !link.startsWith('http');
 
       if (isInvalid) {
-        // Apenas para links # geramos a busca no Google com termos de PDF
-        const query = encodeURIComponent(`${(row[1] || 'Edital')} ${(row[2] || '')} arquivo edital pdf download`);
+        const query = encodeURIComponent(`${title} ${(row[2] || '')} edital pdf download`);
         link = `https://www.google.com/search?q=${query}`;
       }
 
-      // IMPORTANTE: Para links da FUNCAP e SECULT que apontam para a home/lista (dados legados),
-      // nós mantemos o link mas o robô novo já está configurado para capturar PDFs.
-      // Instruímos o usuário a limpar a planilha para atualizar esses links.
-
-      return {
+      const edital = {
         id: row[0],
-        title: row[1],
+        title: title,
         organization: row[2],
         publishDate: row[3],
         link,
         status: row[5],
         notified: row[6] === 'TRUE'
       };
+
+      // Se já existe um com o mesmo título, mantemos o que tiver o link "melhor" (que não seja Google)
+      if (!uniqueEditais.has(normalizedTitle) || (!link.includes('google.com') && uniqueEditais.get(normalizedTitle).link.includes('google.com'))) {
+        uniqueEditais.set(normalizedTitle, edital);
+      }
     });
+
+    return Array.from(uniqueEditais.values());
   } catch (error) {
     console.error('Erro ao buscar editais:', error);
     return [];

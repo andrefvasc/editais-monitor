@@ -1,7 +1,6 @@
 import * as cheerio from 'cheerio';
 import crypto from 'crypto';
 
-// Alguns sites governamentais têm certificados SSL antigos ou inválidos.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 export interface ScrapedEdital {
@@ -14,8 +13,7 @@ export interface ScrapedEdital {
   notified: boolean;
 }
 
-// Utilitário para fetch com timeout
-async function fetchWithTimeout(url: string, options: any = {}, timeout = 10000) {
+async function fetchWithTimeout(url: string, options: any = {}, timeout = 15000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
   try {
@@ -35,22 +33,16 @@ async function fetchWithTimeout(url: string, options: any = {}, timeout = 10000)
   }
 }
 
-/**
- * Verifica se o edital é recente (2025 ou 2026)
- */
 function isRecent(title: string): boolean {
-  const currentYears = ['2025', '2026', '26', '25'];
   const text = title.toLowerCase();
-  // Se o título explicitamente menciona um ano antigo, descarta
-  if (text.includes('2010') || text.includes('2011') || text.includes('2014') || text.includes('2016') || text.includes('2018') || text.includes('2020') || text.includes('2022')) {
-    return false;
-  }
-  // Se menciona um dos anos atuais ou não menciona ano nenhum (pode ser novo), aceita
-  return true; 
+  // Bloqueio explícito de anos anteriores
+  const oldYears = ['2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024'];
+  if (oldYears.some(y => text.includes(y))) return false;
+  return true;
 }
 
 /**
- * Scraper para o portal da FUNCAP
+ * Scraper FUNCAP
  */
 export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
   const pageUrl = 'https://montenegro.funcap.ce.gov.br/sugba/editais-site-wordpress';
@@ -59,40 +51,33 @@ export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
 
   try {
     const response = await fetchWithTimeout(pageUrl);
-    if (!response.ok) return [];
-
     const html = await response.text();
     const $ = cheerio.load(html);
 
     const allPdfLinks: string[] = [];
-    $('ul.ListaDecorada li a').each((_i, el) => {
+    $('a').each((_i, el) => {
       const href = $(el).attr('href') || '';
-      if (href.includes('/edital/') && !href.includes('/resultados/') && !href.includes('/prorrogacao/')) {
-        const clean = href.replace(/^\.\.\//, '/');
-        allPdfLinks.push(`${pdfBase}${clean}`);
+      if (href.includes('/edital/') && !href.includes('/resultados/')) {
+        const clean = href.startsWith('http') ? href : `${pdfBase}${href.replace(/^\.\.\//, '/')}`;
+        allPdfLinks.push(clean);
       }
     });
 
     let pdfIndex = 0;
-    $('td.laranja').each((_i, el) => {
-      const title = $(el).find('span').text().trim() || $(el).find('a').text().trim();
+    $('td.laranja, .edital-title').each((_i, el) => {
+      const title = $(el).text().trim();
       if (!title || title.toLowerCase().includes('resultado')) return;
+      if (!isRecent(title)) return;
 
       const link = allPdfLinks[pdfIndex] || 'https://www.funcap.ce.gov.br/editais/';
       pdfIndex++;
 
-      // Filtro de Ano e Relevância
-      if (!isRecent(title)) return;
-
       const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
       editais.push({
         id: `FUNCAP-${hash}`,
-        title,
-        organization: 'FUNCAP',
+        title, organization: 'FUNCAP',
         publishDate: new Date().toISOString(),
-        link,
-        status: 'Aberto',
-        notified: false
+        link, status: 'Aberto', notified: false
       });
     });
 
@@ -104,7 +89,7 @@ export async function scrapeFuncap(): Promise<ScrapedEdital[]> {
 }
 
 /**
- * Scraper para o portal da SECULT
+ * Scraper SECULT
  */
 export async function scrapeSecult(): Promise<ScrapedEdital[]> {
   const url = 'https://www.secult.ce.gov.br/';
@@ -112,29 +97,26 @@ export async function scrapeSecult(): Promise<ScrapedEdital[]> {
 
   try {
     const response = await fetchWithTimeout(url);
-    if (!response.ok) return [];
-
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    $('.news-card, article, .post').each((_i, element) => {
-      const titleElement = $(element).find('h3 a, .card-title a, a').first();
-      const title = titleElement.text().trim();
-      const link = titleElement.attr('href') || '';
+    $('a').each((_i, element) => {
+      const title = $(element).text().trim().replace(/\s+/g, ' ');
+      const link = $(element).attr('href') || '';
 
-      if (!title || !isRecent(title)) return;
-
+      if (title.length < 20 || !link.startsWith('http')) return;
+      
       const lowerTitle = title.toLowerCase();
-      if (lowerTitle.includes('edital') || lowerTitle.includes('mecenas') || lowerTitle.includes('chamada')) {
+      const keywords = ['edital', 'mecenas', 'chamada', 'seleção', 'fomento', 'inscrições', 'convocatória'];
+      const isEdital = keywords.some(k => lowerTitle.includes(k));
+
+      if (isEdital && isRecent(title)) {
         const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
         editais.push({
           id: `SECULT-${hash}`,
-          title,
-          organization: 'SECULT',
+          title, organization: 'SECULT',
           publishDate: new Date().toISOString(),
-          link,
-          status: 'Aberto',
-          notified: false
+          link, status: 'Aberto', notified: false
         });
       }
     });
@@ -147,7 +129,7 @@ export async function scrapeSecult(): Promise<ScrapedEdital[]> {
 }
 
 /**
- * Scraper para o portal da SEPLAG
+ * Scraper SEPLAG
  */
 export async function scrapeSeplag(): Promise<ScrapedEdital[]> {
   const url = 'https://www.seplag.ce.gov.br/category/noticias/';
@@ -155,31 +137,25 @@ export async function scrapeSeplag(): Promise<ScrapedEdital[]> {
 
   try {
     const response = await fetchWithTimeout(url);
-    if (!response.ok) return [];
-
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    $('.news-card').each((_i, element) => {
-      const titleElement = $(element).find('.card-title a');
-      const title = titleElement.text().trim();
-      const link = titleElement.attr('href') || url;
+    $('a').each((_i, element) => {
+      const title = $(element).text().trim().replace(/\s+/g, ' ');
+      const link = $(element).attr('href') || '';
 
-      if (!title || !isRecent(title)) return;
-
+      if (title.length < 15 || !link.startsWith('http')) return;
+      
       const lowerTitle = title.toLowerCase();
-      const isRelevant = ['edital', 'seleção', 'selecao', 'credenciamento', 'chamada pública'].some(k => lowerTitle.includes(k));
+      const isRelevant = ['edital', 'seleção', 'credenciamento', 'chamada pública'].some(k => lowerTitle.includes(k));
 
-      if (isRelevant) {
+      if (isRelevant && isRecent(title)) {
         const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
         editais.push({
           id: `SEPLAG-${hash}`,
-          title,
-          organization: 'SEPLAG',
+          title, organization: 'SEPLAG',
           publishDate: new Date().toISOString(),
-          link,
-          status: 'Aberto',
-          notified: false
+          link, status: 'Aberto', notified: false
         });
       }
     });
@@ -192,82 +168,33 @@ export async function scrapeSeplag(): Promise<ScrapedEdital[]> {
 }
 
 /**
- * Scraper genérico do Governo do Ceará
- */
-export async function scrapeCearaGov(): Promise<ScrapedEdital[]> {
-  const url = 'https://www.ce.gov.br/?s=edital';
-  const editais: ScrapedEdital[] = [];
-
-  try {
-    const response = await fetchWithTimeout(url);
-    if (!response.ok) return [];
-
-    const html = await response.text();
-    const $ = cheerio.load(html);
-
-    $('.news-card').each((_i, element) => {
-      const titleElement = $(element).find('.card-title a');
-      const title = titleElement.text().trim();
-      if (!title || !isRecent(title)) return;
-
-      const link = titleElement.attr('href') || url;
-      let organization = 'GOVERNO DO CEARÁ';
-      const upperTitle = title.toUpperCase();
-      
-      if (upperTitle.includes('SECULT') || upperTitle.includes('CULTURA')) organization = 'SECULT';
-      else if (upperTitle.includes('SPS')) organization = 'SPS';
-      else if (upperTitle.includes('SEPLAG')) organization = 'SEPLAG';
-
-      const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
-      editais.push({
-        id: `CEGOV-${hash}`,
-        title,
-        organization,
-        publishDate: new Date().toISOString(),
-        link,
-        status: 'Aberto',
-        notified: false
-      });
-    });
-
-    return editais;
-  } catch (error) {
-    console.error('Erro Ceará Gov:', error);
-    return [];
-  }
-}
-
-/**
- * Scraper para o portal da FINEP
+ * Scraper FINEP
  */
 export async function scrapeFinep(): Promise<ScrapedEdital[]> {
-  const url = 'http://www.finep.gov.br/chamadas-publicas/chamadaspublicas?situacao=aberta';
+  const url = 'http://www.finep.gov.br/chamadas-publicas/chamadaspublicas';
   const editais: ScrapedEdital[] = [];
 
   try {
     const response = await fetchWithTimeout(url);
-    if (!response.ok) return [];
-
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    $('#conteudoChamada h3 a').each((_i, element) => {
-      const title = $(element).text().trim();
-      const relativeLink = $(element).attr('href') || '';
-      const link = relativeLink.startsWith('http') ? relativeLink : `http://www.finep.gov.br${relativeLink}`;
+    $('a').each((_i, element) => {
+      const title = $(element).text().trim().replace(/\s+/g, ' ');
+      const href = $(element).attr('href') || '';
 
-      if (!title || !isRecent(title)) return;
+      if (href.includes('chamadapublica/') && title.length > 10) {
+        const link = href.startsWith('http') ? href : `http://www.finep.gov.br${href}`;
+        if (!isRecent(title)) return;
 
-      const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
-      editais.push({
-        id: `FINEP-${hash}`,
-        title,
-        organization: 'FINEP',
-        publishDate: new Date().toISOString(),
-        link,
-        status: 'Aberto',
-        notified: false
-      });
+        const hash = crypto.createHash('md5').update(title.toLowerCase()).digest('hex').substring(0, 8);
+        editais.push({
+          id: `FINEP-${hash}`,
+          title, organization: 'FINEP',
+          publishDate: new Date().toISOString(),
+          link, status: 'Aberto', notified: false
+        });
+      }
     });
 
     return editais;
@@ -277,6 +204,5 @@ export async function scrapeFinep(): Promise<ScrapedEdital[]> {
   }
 }
 
-export async function scrapeProsas(): Promise<ScrapedEdital[]> {
-  return [];
-}
+export async function scrapeCearaGov(): Promise<ScrapedEdital[]> { return []; }
+export async function scrapeProsas(): Promise<ScrapedEdital[]> { return []; }
